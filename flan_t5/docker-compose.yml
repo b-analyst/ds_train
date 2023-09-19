@@ -4,6 +4,8 @@ services:
   clf_1:
     container_name: ds_train
     build: .
+    env_file:
+      - .env
     deploy:
       resources:
         reservations:
