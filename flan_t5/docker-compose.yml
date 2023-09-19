@@ -1,0 +1,12 @@
+version: '3.9'
+
+services:
+  clf_1:
+    container_name: ds_train
+    build: .
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - capabilities: [gpu]
+    restart: unless-stopped
