@@ -1,4 +1,4 @@
-FROM nvidia/cuda
+  FROM nvidia/cuda
 
 RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y curl
 RUN apt-get install unzip
