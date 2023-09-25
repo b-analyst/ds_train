@@ -153,7 +153,7 @@ dmypy.json
 cython_debug/
 
 # experiments folder
-./experiments
+./flan_t5/experiments
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
