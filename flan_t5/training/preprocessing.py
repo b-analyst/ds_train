@@ -12,7 +12,7 @@ secret_access_key = os.environ['S3_SECRET_ACCESS_KEY']
 bucket_name = os.environ['S3_BUCKET_NAME']
 target = os.environ['DATA_PATH']  # Replace with the actual object key
 
-def s3_download(destination: str='data'):
+def s3_download(destination: str=''):
 # Create an S3 client
     s3 = boto3.client('s3', aws_access_key_id=access_key_id, aws_secret_access_key=secret_access_key)
     try:
@@ -26,33 +26,45 @@ def s3_download(destination: str='data'):
             print("The object does not exist.")
         else:
             raise
+
 def construct_prompt(prompt_template: str=None, context: str=None):
     return f'{prompt_template}\n\nContext: \n{context}\n\nOutput: '
 
-def load_hf_dataset(data_path: str='data', download: Optional[bool]=True, file_name: str='data.csv'):
-    path = os.path.join(os.getcwd(), data_path)
-    if download:
-        s3_download(destination=data_path)
-        return Dataset.from_pandas(pd.read_csv(os.path.join(path, file_name)))
+def load_hf_dataset(file_path: str='', download: Optional[bool]=True):
+    path = os.path.join(os.getcwd(), file_path)
+    print(path)
+    if download and not os.path.exists(path):
+        s3_download(destination=path)
+        return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
     else:
-        return Dataset.from_pandas(pd.read_csv(os.path.join(path, file_name)))
+        return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
 
 class Preprocessor:
-    def __init__(self, prompt_template: str='', model_name: str='google/flan-t5-small', max_source_length: int=517, max_target_length: int=128):
+    def __init__(
+            self, 
+            prompt_template: str='', 
+            model_name: str='google/flan-t5-small', 
+            max_source_length: int=517, 
+            max_target_length: int=128,
+            input_column_name: str='patent_text',
+            target_column_name: str='subclass_id'
+        ):
         self.model_name=model_name
         self.max_source_length=max_source_length
         self.max_target_length=max_target_length
         self.prompt_template=prompt_template
+        self.input=input_column_name
+        self.target=target_column_name
 
     def preprocess(self, sample, padding='max_length'):
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        inputs = [construct_prompt(self.prompt_template, item) for item in sample['inputs']]
+        inputs = [construct_prompt(self.prompt_template, item) for item in sample[self.input]]
 
         # tokenize inputs
         model_inputs = tokenizer(inputs, max_length=self.max_source_length, padding=padding, truncation=True)
 
         # Tokenize targets with the `text_target` keyword argument
-        labels = tokenizer(text_target=sample['targets'], max_length=self.max_target_length, padding=padding, truncation=True)
+        labels = tokenizer(text_target=sample[self.target], max_length=self.max_target_length, padding=padding, truncation=True)
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
@@ -63,7 +75,6 @@ class Preprocessor:
 
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
-
 
 
 
