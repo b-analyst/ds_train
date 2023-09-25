@@ -76,7 +76,30 @@ class Preprocessor:
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 
+if __name__ == '__main__':
 
+    prompt_template = 'Generate USPC labels for the following text: '
+    model_name = 'google/flan-t5-small'
+    max_source_length = 517
+    max_target_length = 128
+    input_column_name='patent_text'
+    target_column_name='subclass_id'
+    save_dataset_path = os.path.join(os.getcwd(), 'data')
+
+    dataset = load_hf_dataset(file_path='data/grouped_labels.csv')
+    processed_data = dataset.train_test_split(test_size=0.15, shuffle=True, seed=42)
+    preprocessor=Preprocessor(
+        prompt_template, 
+        model_name, 
+        max_source_length, 
+        max_target_length,
+        input_column_name,
+        target_column_name
+    )
+    train_tokenized_dataset = processed_data['train'].map(preprocessor.preprocess, batched=True, remove_columns=list(processed_data['train'].features))
+    test_tokenized_dataset = processed_data['test'].map(preprocessor.preprocess, batched=True, remove_columns=list(processed_data['test'].features))
+    train_tokenized_dataset.save_to_disk(os.path.join(save_dataset_path,"train"))
+    test_tokenized_dataset.save_to_disk(os.path.join(save_dataset_path,"test"))
 
 
 
