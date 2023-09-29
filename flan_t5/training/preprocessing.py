@@ -79,7 +79,7 @@ class Preprocessor:
 if __name__ == '__main__':
 
     prompt_template = 'Generate USPC labels for the following text: '
-    model_name = 'google/flan-t5-large'
+    model_name = 'google/flan-t5-xl'
     max_source_length = 517
     max_target_length = 128
     input_column_name='patent_text'
