@@ -35,10 +35,13 @@ def load_hf_dataset(file_path: str='', download: Optional[bool]=True):
     print(path)
     if download and not os.path.exists(path):
         s3_download(destination=path)
-        return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
+        data = pd.read_csv(os.path.join(path)).sample(n=1000)
+        # return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
+        return Dataset.from_pandas(data)
     else:
-        return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
-
+        data = pd.read_csv(os.path.join(path)).sample(n=1000)
+        # return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
+        return Dataset.from_pandas(data)
 class Preprocessor:
     def __init__(
             self, 
