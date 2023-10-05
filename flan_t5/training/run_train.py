@@ -12,7 +12,7 @@ import torch
 import evaluate
 import nltk
 import numpy as np
-
+from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, TaskType
 from huggingface_hub import HfFolder
 from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
 
@@ -88,15 +88,35 @@ def training_function(args):
     # load model from the hub
     model = AutoModelForSeq2SeqLM.from_pretrained(
         args.model_id,
+        load_in_8bit=True,
         use_cache=False if args.gradient_checkpointing else True,  # this is needed for gradient checkpointing
     )
+    # Define LoRA Config
+    lora_config = LoraConfig(
+        r=16,
+        lora_alpha=32,
+        target_modules=["q", "v"],
+        lora_dropout=0.05,
+        bias="none",
+        task_type=TaskType.SEQ_2_SEQ_LM
+    )
+    # prepare int-8 model for training
+    model = prepare_model_for_int8_training(model)
+
+    # add LoRA adaptor
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
 
     # we want to ignore tokenizer pad token in the loss
     label_pad_token_id = -100
     # Data collator
     data_collator = DataCollatorForSeq2Seq(
-        tokenizer, model=model, label_pad_token_id=label_pad_token_id, pad_to_multiple_of=8
+        tokenizer,
+        model=model,
+        label_pad_token_id=label_pad_token_id,
+        pad_to_multiple_of=8
     )
+
 
     # Define compute metrics function
     def compute_metrics(eval_preds):
