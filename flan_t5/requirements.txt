@@ -4,6 +4,8 @@ peft==0.2.0
 datasets==2.9.0
 accelerate==0.16.0
 evaluate==0.4.0
+bitsandbytes==0.37.1
+loralib
 deepspeed
 boto3
 ninja
