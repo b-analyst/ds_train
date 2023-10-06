@@ -91,7 +91,8 @@ def training_function(args):
     # load model from the hub
     model = AutoModelForSeq2SeqLM.from_pretrained(
         args.model_id,
-        load_in_8bit=True,
+        # not supported for Trainer
+        # load_in_8bit=True,
         use_cache=False if args.gradient_checkpointing else True,  # this is needed for gradient checkpointing
         device_map="auto"
     )
