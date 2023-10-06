@@ -16,6 +16,8 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, Ta
 from huggingface_hub import HfFolder
 from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
 from pathlib import Path
+from accelerate import dispatch_model, infer_auto_device_map
+from accelerate.utils import get_balanced_memory
 
 nltk_path = os.path.join(str(Path.home()), 'nltk_data')
 if not os.path.exists(nltk_path):
@@ -111,6 +113,23 @@ def training_function(args):
     # add LoRA adaptor
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+
+    max_memory = get_balanced_memory(
+        model,
+        max_memory=None,
+        no_split_module_classes=["T5LayerSelfAttention", "T5LayerFF", "T5LayerCrossAttention"],
+        dtype='float32',
+        low_zero=False,
+    )
+
+    device_map = infer_auto_device_map(
+        model,
+        max_memory=max_memory,
+        no_split_module_classes=["T5LayerSelfAttention", "T5LayerFF", "T5LayerCrossAttention"],
+        dtype='float32'
+    )
+
+    model = dispatch_model(model, device_map=device_map)
 
     # we want to ignore tokenizer pad token in the loss
     label_pad_token_id = -100
