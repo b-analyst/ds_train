@@ -268,22 +268,22 @@ def training_function(args):
             lr_scheduler.step()
             completed_steps += 1
 
-            progress_bar.update(1)
+            progress_bar.set_postfix({'training_loss': '{:.3f}'.format(loss.item()/len(batch))})
             if isinstance(args.logging_steps, int):
                 if completed_steps % args.logging_steps == 0:
                     steps_this_epoch = completed_steps % len(train_dataloader)
                     train_loss = total_loss.item() / steps_this_epoch
                     train_perplexity = math.exp(train_loss)
-                    accelerator.log(
-                        {
-                            "train_loss": train_loss,
-                            "train_perplexity": train_perplexity,
-                            "epoch": epoch,
-                            "step": completed_steps,
-                            "steps_this_epoch": steps_this_epoch,
-                        },
-                        step=completed_steps,
-                    )
+                    # accelerator.log(
+                    #     {
+                    #         "train_loss": train_loss,
+                    #         "train_perplexity": train_perplexity,
+                    #         "epoch": epoch,
+                    #         "step": completed_steps,
+                    #         "steps_this_epoch": steps_this_epoch,
+                    #     },
+                    #     step=completed_steps,
+                    # )
                     logger.info(
                         f"Epoch: {epoch}, Step: {completed_steps}, Loss: {train_loss}, Perplexity: {train_perplexity}"
                     )
