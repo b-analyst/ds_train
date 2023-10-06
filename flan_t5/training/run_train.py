@@ -251,14 +251,14 @@ def training_function(args):
             model.zero_grad()
             optimizer.zero_grad()
             print(batch)
-            batch = tuple(b.to(accelerator.device) for b in batch)
-            inputs = {
-                'input_ids':      batch[0],
-                'attention_mask': batch[1],
-                'labels':         batch[2],
-                }       
+            # batch = tuple(b.to(accelerator.device) for b in batch)
+            # inputs = {
+            #     'input_ids':      batch[0],
+            #     'attention_mask': batch[1],
+            #     'labels':         batch[2],
+            #     }       
 
-            outputs = model(**inputs)
+            outputs = model(**batch)
         
             loss = outputs.loss
             total_loss += loss.detach().float()
