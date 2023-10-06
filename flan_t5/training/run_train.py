@@ -1,5 +1,7 @@
+import math
 import os
 import argparse
+import time
 import numpy as np
 from transformers import (
     AutoModelForSeq2SeqLM,
@@ -7,21 +9,30 @@ from transformers import (
     AutoTokenizer,
     set_seed,
 )
+import datasets
+import transformers
 from datasets import load_from_disk
 import torch
+from torch.utils.data import DataLoader
 import evaluate
 import nltk
 import numpy as np
 from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, TaskType
 from huggingface_hub import HfFolder
-from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
+from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments, get_linear_schedule_with_warmup
 from pathlib import Path
+from accelerate import Accelerator
 from accelerate import dispatch_model, infer_auto_device_map
 from accelerate.utils import get_balanced_memory
+import logging
+from accelerate.logging import get_logger
+from tqdm.auto import tqdm
 
 nltk_path = os.path.join(str(Path.home()), 'nltk_data')
 if not os.path.exists(nltk_path):
     nltk.download("punkt", quiet=True)
+
+logger = get_logger(__name__)
 
 # Metric
 metric = evaluate.load("rouge")
@@ -53,9 +64,6 @@ def parse_arge():
     # add model id and dataset path argument
     parser.add_argument("--model_id", type=str, default="google/flan-t5-xl", help="Model id to use for training.")
     parser.add_argument("--dataset_path", type=str, default="data", help="Path to the already processed dataset.")
-    parser.add_argument(
-        "--repository_id", type=str, default=None, help="Hugging Face Repository id for uploading models"
-    )
     # add training hyperparameters for epochs, batch size, learning rate, and seed
     parser.add_argument("--epochs", type=int, default=3, help="Number of epochs to train for.")
     parser.add_argument("--per_device_train_batch_size", type=int, default=8, help="Batch size to use for training.")
@@ -63,9 +71,17 @@ def parse_arge():
     parser.add_argument("--generation_max_length", type=int, default=140, help="Maximum length to use for generation")
     parser.add_argument("--generation_num_beams", type=int, default=4, help="Number of beams to use for generation.")
     parser.add_argument("--lr", type=float, default=3e-3, help="Learning rate to use for training.")
+    parser.add_argument("--num_warmup_steps", type=int, default=500, help="Number of warmup steps for learning rate scheduler")
+    parser.add_argument("--max_train_steps", type=int, default=None, help="Max train steps. Will calculate for you if None.")
     parser.add_argument("--seed", type=int, default=42, help="Seed to use for training.")
     parser.add_argument("--deepspeed", type=str, default=None, help="Path to deepspeed config file.")
-    parser.add_argument("--gradient_checkpointing", type=bool, default=True, help="Path to deepspeed config file.")
+    parser.add_argument("--gradient_checkpointing", type=bool, default=True, help="Path to deepspeed config file."),
+    parser.add_argument(
+        "--logging_steps",
+        type=int,
+        default=None,
+        help="log every n steps",
+    )
     parser.add_argument(
         "--bf16",
         type=bool,
@@ -86,9 +102,22 @@ def training_function(args):
     # set seed
     set_seed(args.seed)
 
-    # load dataset from disk and tokenizer
-    train_dataset = load_from_disk(os.path.join(args.dataset_path, "train"))
-    eval_dataset = load_from_disk(os.path.join(args.dataset_path, "test"))
+    accelerator = Accelerator()
+
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
+    logger.info(accelerator.state, main_process_only=False)
+
+    if accelerator.is_local_main_process:
+        datasets.utils.logging.set_verbosity_warning()
+        transformers.utils.logging.set_verbosity_info()
+    else:
+        datasets.utils.logging.set_verbosity_error()
+        transformers.utils.logging.set_verbosity_error()
+
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
     # load model from the hub
     model = AutoModelForSeq2SeqLM.from_pretrained(
@@ -141,6 +170,139 @@ def training_function(args):
         pad_to_multiple_of=8
     )
 
+    # load dataset from disk and tokenizer
+    train_dataset = load_from_disk(os.path.join(args.dataset_path, "train"))
+    eval_dataset = load_from_disk(os.path.join(args.dataset_path, "test"))
+
+    train_dataloader = DataLoader(
+        train_dataset, 
+        shuffle=True, 
+        collate_fn=data_collator, 
+        batch_size=args.per_device_train_batch_size
+    )
+
+    eval_dataloader = DataLoader(
+        eval_dataset, 
+        collate_fn=data_collator, 
+        batch_size=args.per_device_eval_batch_size
+    )
+
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    # New Code #
+    # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
+    optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=args.lr)
+
+     # Scheduler and math around the number of training steps.
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    if args.max_train_steps is None:
+        args.max_train_steps = args.epochs * num_update_steps_per_epoch
+
+
+    lr_scheduler = get_linear_schedule_with_warmup(
+        optimizer=optimizer,
+        num_warmup_steps=args.num_warmup_steps,
+        num_training_steps=args.max_train_steps,
+    )
+
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+    )
+
+     # Train!
+    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+     # Figure out how many steps we should save the Accelerator states
+    output_dir = os.path.join(os.getcwd(), args.model_id.split("/")[-1])
+
+    logger.info("***** Running training *****")
+    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num Epochs = {args.num_train_epochs}")
+    logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(f"  Total optimization steps = {args.max_train_steps}")
+
+    # Only show the progress bar once on each machine.
+    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+    completed_steps = 0
+    starting_epoch = 0
+
+    for epoch in range(starting_epoch, args.num_train_epochs):
+        start_time = time()
+        model.train()
+        total_loss = 0
+        for _, batch in enumerate(train_dataloader):
+            model.zero_grad()
+            optimizer.zero_grad()
+            batch = tuple(b.to(accelerator.device) for b in batch)
+            inputs = {
+                'input_ids':      batch[0],
+                'attention_mask': batch[1],
+                'labels':         batch[2],
+                }       
+
+            outputs = model(**inputs)
+        
+            loss = outputs.loss
+            total_loss += loss.detach().float()
+            accelerator.backward(loss)
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+            optimizer.step()
+            lr_scheduler.step()
+
+            progress_bar.set_postfix({'training_loss': '{:.3f}'.format(loss.item()/len(batch))})
+            if isinstance(args.logging_steps, int):
+                if completed_steps % args.logging_steps == 0:
+                    steps_this_epoch = completed_steps % len(train_dataloader)
+                    train_loss = total_loss.item() / steps_this_epoch
+                    train_perplexity = math.exp(train_loss)
+                    accelerator.log(
+                        {
+                            "train_loss": train_loss,
+                            "train_perplexity": train_perplexity,
+                            "epoch": epoch,
+                            "step": completed_steps,
+                            "steps_this_epoch": steps_this_epoch,
+                        },
+                        step=completed_steps,
+                    )
+                    logger.info(
+                        f"Epoch: {epoch}, Step: {completed_steps}, Loss: {train_loss}, Perplexity: {train_perplexity}"
+                    )
+        end_time = time()
+        logger.info(f"Epoch {epoch} training took {end_time-start_time} seconds")
+
+        accelerator.wait_for_everyone()
+        unwrapped_model = accelerator.unwrap_model(model)
+        accelerator.save(unwrapped_model.state_dict(), f'{output_dir}/epoch-{epoch}.pt')
+
+    accelerator.wait_for_everyone()
+    unwrapped_model = accelerator.unwrap_model(model)
+    # New Code #
+    # Saves the whole/unpartitioned fp16 model when in ZeRO Stage-3 to the output directory if
+    # `stage3_gather_16bit_weights_on_model_save` is True in DeepSpeed Config file or
+    # `zero3_save_16bit_model` is True in DeepSpeed Plugin.
+    # For Zero Stages 1 and 2, models are saved as usual in the output directory.
+    # The model name saved is `pytorch_model.bin`
+    unwrapped_model.save_pretrained(
+        output_dir,
+        is_main_process=accelerator.is_main_process,
+        save_function=accelerator.save,
+        state_dict=accelerator.get_state_dict(model),
+    )
+    if accelerator.is_main_process:
+        tokenizer.save_pretrained(output_dir)
 
     # Define compute metrics function
     def compute_metrics(eval_preds):
@@ -160,59 +322,6 @@ def training_function(args):
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
         return result
-
-    # Define training args
-    # output_dir = args.repository_id if args.repository_id else args.model_id.split("/")[-1]
-    output_dir = args.model_id.split("/")[-1]
-    training_args = Seq2SeqTrainingArguments(
-        output_dir=output_dir,
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=args.per_device_eval_batch_size,
-        predict_with_generate=True,
-        generation_max_length=args.generation_max_length,
-        generation_num_beams=args.generation_num_beams,
-        fp16=False,  # T5 overflows with fp16
-        bf16=args.bf16,  # Use BF16 if available
-        learning_rate=args.lr,
-        num_train_epochs=args.epochs,
-        deepspeed=args.deepspeed,
-        gradient_checkpointing=args.gradient_checkpointing,
-        # logging & evaluation strategies
-        logging_dir=f"{output_dir}/logs",
-        logging_strategy="steps",
-        logging_steps=500,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
-        save_total_limit=2,
-        load_best_model_at_end=True,
-        # push to hub parameters
-        report_to="tensorboard",
-        push_to_hub=True if args.repository_id else False,
-        hub_strategy="every_save",
-        hub_model_id=args.repository_id if args.repository_id else None,
-        hub_token=args.hf_token,
-    )
-
-    # Create Trainer instance
-    trainer = Seq2SeqTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
-    )
-
-    # Start training
-    trainer.train()
-
-    # Save our tokenizer and create model card
-    tokenizer.save_pretrained(output_dir)
-    trainer.create_model_card()
-    # Push the results to the hub
-    if args.repository_id:
-        trainer.push_to_hub()
-
 
 def main():
     args, _ = parse_arge()
