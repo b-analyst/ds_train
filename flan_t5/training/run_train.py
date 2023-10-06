@@ -243,7 +243,7 @@ def training_function(args):
     completed_steps = 0
     starting_epoch = 0
 
-    for epoch in range(starting_epoch, args.num_train_epochs):
+    for epoch in range(starting_epoch, args.epochs):
         start_time = time()
         model.train()
         total_loss = 0
