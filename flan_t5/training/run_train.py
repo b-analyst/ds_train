@@ -256,7 +256,7 @@ def training_function(args):
                 'labels':         batch['labels'].to(accelerator.device),
                 }       
 
-            outputs = model(**batch)
+            outputs = model(**inputs)
         
             loss = outputs.loss
             total_loss += loss.detach().float()
