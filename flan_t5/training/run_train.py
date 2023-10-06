@@ -228,6 +228,8 @@ def training_function(args):
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
      # Figure out how many steps we should save the Accelerator states
     output_dir = os.path.join(os.getcwd(), args.model_id.split("/")[-1])
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
@@ -245,7 +247,7 @@ def training_function(args):
     for epoch in tqdm(range(starting_epoch, args.epochs + 1)):
         start_time = time()
         model.train()
-        total_loss = 0
+        total_loss = []
         progress_bar = tqdm(train_dataloader, disable=not accelerator.is_local_main_process)
         for batch in progress_bar:
             model.zero_grad()
@@ -259,7 +261,7 @@ def training_function(args):
             outputs = model(**inputs)
         
             loss = outputs.loss
-            total_loss += loss.detach().float()
+            total_loss.append(loss.item())
             accelerator.backward(loss)
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
