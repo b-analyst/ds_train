@@ -134,38 +134,38 @@ def training_function(args):
         use_cache=False if args.gradient_checkpointing else True,  # this is needed for gradient checkpointing
         device_map="auto"
     )
-    # Define LoRA Config
-    lora_config = LoraConfig(
-        r=16,
-        lora_alpha=32,
-        target_modules=["q", "v"],
-        lora_dropout=0.05,
-        bias="none",
-        task_type=TaskType.SEQ_2_SEQ_LM
-    )
-    # prepare int-8 model for training
-    model = prepare_model_for_int8_training(model)
+    # # Define LoRA Config
+    # lora_config = LoraConfig(
+    #     r=16,
+    #     lora_alpha=32,
+    #     target_modules=["q", "v"],
+    #     lora_dropout=0.05,
+    #     bias="none",
+    #     task_type=TaskType.SEQ_2_SEQ_LM
+    # )
+    # # prepare int-8 model for training
+    # model = prepare_model_for_int8_training(model)
 
-    # add LoRA adaptor
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
+    # # add LoRA adaptor
+    # model = get_peft_model(model, lora_config)
+    # model.print_trainable_parameters()
 
-    max_memory = get_balanced_memory(
-        model,
-        max_memory=None,
-        no_split_module_classes=["T5LayerSelfAttention", "T5LayerFF", "T5LayerCrossAttention"],
-        dtype='float32',
-        low_zero=False,
-    )
+    # max_memory = get_balanced_memory(
+    #     model,
+    #     max_memory=None,
+    #     no_split_module_classes=["T5LayerSelfAttention", "T5LayerFF", "T5LayerCrossAttention"],
+    #     dtype='float32',
+    #     low_zero=False,
+    # )
 
-    device_map = infer_auto_device_map(
-        model,
-        max_memory=max_memory,
-        no_split_module_classes=["T5LayerSelfAttention", "T5LayerFF", "T5LayerCrossAttention"],
-        dtype='float32'
-    )
+    # device_map = infer_auto_device_map(
+    #     model,
+    #     max_memory=max_memory,
+    #     no_split_module_classes=["T5LayerSelfAttention", "T5LayerFF", "T5LayerCrossAttention"],
+    #     dtype='float32'
+    # )
 
-    model = dispatch_model(model, device_map=device_map)
+    # model = dispatch_model(model, device_map=device_map)
 
     # we want to ignore tokenizer pad token in the loss
     label_pad_token_id = -100
