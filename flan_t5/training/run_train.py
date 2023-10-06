@@ -15,8 +15,11 @@ import numpy as np
 from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, TaskType
 from huggingface_hub import HfFolder
 from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
+from pathlib import Path
 
-nltk.download("punkt", quiet=True)
+nltk_path = os.path.join(str(Path.home()), 'nltk_data')
+if not os.path.exists(nltk_path):
+    nltk.download("punkt", quiet=True)
 
 # Metric
 metric = evaluate.load("rouge")
