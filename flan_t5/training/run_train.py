@@ -267,7 +267,7 @@ def training_function(args):
             lr_scheduler.step()
             completed_steps += 1
 
-            progress_bar.set_postfix({'training_loss': '{:.3f}'.format(loss.item()/len(batch))})
+            progress_bar.update(1)
             if isinstance(args.logging_steps, int):
                 if completed_steps % args.logging_steps == 0:
                     steps_this_epoch = completed_steps % len(train_dataloader)
