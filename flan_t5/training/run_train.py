@@ -1,7 +1,7 @@
 import math
 import os
 import argparse
-import time
+from time import time
 import numpy as np
 from transformers import (
     AutoModelForSeq2SeqLM,
