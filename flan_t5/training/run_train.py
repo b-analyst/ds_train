@@ -238,22 +238,24 @@ def training_function(args):
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
 
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+    
     completed_steps = 0
     starting_epoch = 1
 
-    for epoch in range(starting_epoch, args.epochs):
+    for epoch in tqdm(range(starting_epoch, args.epochs + 1)):
         start_time = time()
         model.train()
         total_loss = 0
-        for _, batch in enumerate(train_dataloader):
+        progress_bar = tqdm(train_dataloader, disable=not accelerator.is_local_main_process)
+        for batch in progress_bar:
             model.zero_grad()
             optimizer.zero_grad()
+            batch = tuple(b.to(accelerator.device) for b in batch)
             inputs = {
-                'input_ids':      batch['input_ids'].to(accelerator.device),
-                'attention_mask': batch['attention_mask'].to(accelerator.device),
-                'labels':         batch['labels'].to(accelerator.device),
-                }       
+                'input_ids':      batch[0],
+                'attention_mask': batch[1],
+                'labels':         batch[2],
+            }       
 
             outputs = model(**inputs)
         
