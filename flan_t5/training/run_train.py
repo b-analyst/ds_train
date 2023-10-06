@@ -265,6 +265,7 @@ def training_function(args):
 
             optimizer.step()
             lr_scheduler.step()
+            completed_steps += 1
 
             progress_bar.set_postfix({'training_loss': '{:.3f}'.format(loss.item()/len(batch))})
             if isinstance(args.logging_steps, int):
@@ -285,6 +286,7 @@ def training_function(args):
                     logger.info(
                         f"Epoch: {epoch}, Step: {completed_steps}, Loss: {train_loss}, Perplexity: {train_perplexity}"
                     )
+            
         end_time = time()
         logger.info(f"Epoch {epoch} training took {end_time-start_time} seconds")
 
