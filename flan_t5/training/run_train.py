@@ -250,6 +250,7 @@ def training_function(args):
         for _, batch in enumerate(train_dataloader):
             model.zero_grad()
             optimizer.zero_grad()
+            print(batch)
             batch = tuple(b.to(accelerator.device) for b in batch)
             inputs = {
                 'input_ids':      batch[0],
