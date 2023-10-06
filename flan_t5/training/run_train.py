@@ -71,6 +71,7 @@ def parse_arge():
     parser.add_argument("--generation_max_length", type=int, default=140, help="Maximum length to use for generation")
     parser.add_argument("--generation_num_beams", type=int, default=4, help="Number of beams to use for generation.")
     parser.add_argument("--lr", type=float, default=3e-3, help="Learning rate to use for training.")
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
     parser.add_argument("--num_warmup_steps", type=int, default=500, help="Number of warmup steps for learning rate scheduler")
     parser.add_argument("--max_train_steps", type=int, default=None, help="Max train steps. Will calculate for you if None.")
     parser.add_argument("--seed", type=int, default=42, help="Seed to use for training.")
