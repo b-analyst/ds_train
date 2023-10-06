@@ -84,6 +84,12 @@ def parse_arge():
         help="log every n steps",
     )
     parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of updates steps to accumulate before performing a backward/update pass.",
+    )
+    parser.add_argument(
         "--bf16",
         type=bool,
         default=True if torch.cuda.get_device_capability()[0] == 8 else False,
