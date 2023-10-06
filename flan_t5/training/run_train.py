@@ -250,13 +250,11 @@ def training_function(args):
         for _, batch in enumerate(train_dataloader):
             model.zero_grad()
             optimizer.zero_grad()
-            print(batch.keys())
-            # batch = tuple(b.to(accelerator.device) for b in batch)
-            # inputs = {
-            #     'input_ids':      batch[0],
-            #     'attention_mask': batch[1],
-            #     'labels':         batch[2],
-            #     }       
+            inputs = {
+                'input_ids':      batch['input_ids'].to(accelerator.device),
+                'attention_mask': batch['attention_mask'].to(accelerator.device),
+                'labels':         batch['labels'].to(accelerator.device),
+                }       
 
             outputs = model(**batch)
         
