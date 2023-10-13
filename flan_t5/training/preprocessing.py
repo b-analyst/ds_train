@@ -13,10 +13,10 @@ dotenv.load_dotenv(ENVPATH)
 
 
 # Replace these values with your own
-access_key_id = os.environ['S3_ACCESS_KEY_ID']
-secret_access_key = os.environ['S3_SECRET_ACCESS_KEY']
-bucket_name = os.environ['S3_BUCKET_NAME']
-target = os.environ['DATA_PATH']  # Replace with the actual object key
+access_key_id = os.getenv('S3_ACCESS_KEY_ID')
+secret_access_key = os.getenv('S3_SECRET_ACCESS_KEY')
+bucket_name = os.getenv('S3_BUCKET_NAME')
+target = os.getenv('DATA_PATH')  # Replace with the actual object key
 
 def s3_download(destination: str=''):
 # Create an S3 client
