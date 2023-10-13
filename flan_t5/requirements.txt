@@ -13,3 +13,4 @@ rouge-score
 nltk
 py7zr
 tensorboard
+python-dotenv

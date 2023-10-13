@@ -5,6 +5,12 @@ import pandas as pd
 from datasets import Dataset
 from transformers import AutoTokenizer
 from typing import Optional
+import dotenv
+from pathlib import Path
+
+ENVPATH = os.path.join(str(Path.home()), 'ds_train/flan_t5/.env')
+dotenv.load_dotenv(ENVPATH)
+
 
 # Replace these values with your own
 access_key_id = os.environ['S3_ACCESS_KEY_ID']
