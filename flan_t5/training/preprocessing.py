@@ -35,11 +35,11 @@ def load_hf_dataset(file_path: str='', download: Optional[bool]=True):
     print(path)
     if download and not os.path.exists(path):
         s3_download(destination=path)
-        data = pd.read_csv(os.path.join(path)).sample(n=500)
+        data = pd.read_csv(os.path.join(path)).sample(n=1000000)
         # return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
         return Dataset.from_pandas(data)
     else:
-        data = pd.read_csv(os.path.join(path)).sample(n=500)
+        data = pd.read_csv(os.path.join(path)).sample(n=1000000)
         # return Dataset.from_pandas(pd.read_csv(os.path.join(path)))
         return Dataset.from_pandas(data)
 class Preprocessor:
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     save_dataset_path = os.path.join(os.getcwd(), 'data')
 
     dataset = load_hf_dataset(file_path='data/grouped_labels.csv')
-    processed_data = dataset.train_test_split(test_size=0.15, shuffle=True, seed=42)
+    processed_data = dataset.train_test_split(test_size=1000, shuffle=True, seed=42)
     preprocessor=Preprocessor(
         prompt_template, 
         model_name, 

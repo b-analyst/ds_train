@@ -1,8 +1,8 @@
-torch --extra-index-url https://download.pytorch.org/whl/cu117 
-transformers==4.26.0
+# torch --extra-index-url https://download.pytorch.org/whl/cu117 
+transformers
 peft==0.2.0
 datasets==2.9.0
-accelerate==0.16.0
+accelerate
 evaluate==0.4.0
 bitsandbytes==0.37.1
 loralib
